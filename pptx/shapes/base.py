@@ -139,6 +139,10 @@ class BaseShape(object):
         Alternative text for the shape
         """
         return self._element.shape_alt_text
+    
+    @alt_text.setter
+    def alt_text(self,value):
+        self._element._nvXxPr.cNvPr.descr = value
 
 
     @property
