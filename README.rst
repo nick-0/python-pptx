@@ -4,6 +4,12 @@
 *python-pptx* is a Python library for creating and updating PowerPoint (.pptx)
 files.
 
+Updates
+-------
+
+1. Alt Text, `alt_text` attribute for adding metadata to shapes.
+2. Add/Remove Columns/Rows from tables.
+
 A typical use would be generating a customized PowerPoint presentation from
 database content, downloadable by clicking a link in a web application.
 Several developers have used it to automate production of presentation-ready
