@@ -10,6 +10,9 @@ from pptx.shapes import Subshape
 from pptx.text.text import TextFrame
 from pptx.util import Emu, lazyproperty
 
+from copy import deepcopy
+from random import randint
+
 if TYPE_CHECKING:
     from pptx.enum.text import MSO_VERTICAL_ANCHOR
     from pptx.oxml.table import CT_Table, CT_TableCell, CT_TableCol, CT_TableRow
@@ -47,6 +50,49 @@ class Table(object):
         are accessed using list notation, e.g. `col = tbl.columns[0]`.
         """
         return _ColumnCollection(self._tbl, self)
+
+    def add_column(self) -> None:
+        """
+        Duplicates last column to keep formatting and resets it's cells text_frames
+        (e.g. ``column = table.columns.add_column()``).
+        """
+        def random_with_N_digits(n:int)->int:
+            range_start = 10**(n-1)
+            range_end = int(((10**n)-1)*.3)
+            return randint(range_start, range_end)
+        new_col = deepcopy(self._tbl.tblGrid.gridCol_lst[-1])
+        
+        prefix_map = {
+            "a16":"http://schemas.microsoft.com/office/drawing/2014/main",
+            "a":"http://schemas.openxmlformats.org/drawingml/2006/main",
+            }
+        elms = new_col.findall('.//a16:colId',prefix_map)
+        for elm in elms:
+            elm.set('val', str(random_with_N_digits(10)))
+
+        # print(etree.tostring(new_col))
+        self._tbl.tblGrid.append(new_col)  # copies last grid element
+
+        for tr in self._tbl.tr_lst:
+            new_tc = deepcopy(tr.tc_lst[-1])
+            tr.append(new_tc)
+            cell = _Cell(new_tc, tr.tc_lst)
+            cell.text_frame.paragraphs[0].text = ""
+            elms = tr.findall('.//a:extLst', prefix_map)
+            for elm in elms:
+                tr.remove(elm)
+    
+    def remove_column(self,column_idx:int):
+        # col_idx = self._tbl.tblGrid.index(column._gridCol)
+        if column_idx == -1:
+            col_idx = len(self.columns)-1
+        else:
+            col_idx = column_idx
+
+        for tr in self._tbl.tr_lst:
+            tr.remove(tr.tc_lst[col_idx])
+        column = self.columns[col_idx]
+        self._tbl.tblGrid.remove(column._gridCol)
 
     @property
     def first_col(self) -> bool:
@@ -150,6 +196,22 @@ class Table(object):
         accessed using list notation, e.g. `col = tbl.rows[0]`.
         """
         return _RowCollection(self._tbl, self)
+
+    def add_row(self):
+        new_row = deepcopy(self._tbl.tr_lst[-1]) 
+        # duplicating last row of the table as a new row to be added
+        
+        for tc in new_row.tc_lst:
+            cell = _Cell(tc, new_row.tc_lst)
+            cell.text_frame.paragraphs[0].text = ""# defaulting cell contents to empty text
+
+        self._tbl.append(new_row) 
+
+    def remove_row(self, row_idx: int) -> None:
+        if row_idx == -1:
+            row_idx = len(self.rows)-1
+        row_to_delete = self.rows[row_idx]
+        self._tbl.remove(row_to_delete._tr)
 
     @property
     def vert_banding(self) -> bool:

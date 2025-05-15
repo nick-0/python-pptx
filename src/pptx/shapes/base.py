@@ -132,6 +132,17 @@ class BaseShape(object):
         self._element._nvXxPr.cNvPr.name = value  # pyright: ignore[reportPrivateUsage]
 
     @property
+    def alt_text(self):
+        """
+        Alternative text for the shape
+        """
+        return self._element.shape_alt_text
+
+    @alt_text.setter
+    def alt_text(self,value:str):
+        self._element._nvXxPr.cNvPr.descr = value # pyright: ignore[reportPrivateUsage]
+
+    @property
     def part(self) -> BaseSlidePart:
         """The package part containing this shape.
 
