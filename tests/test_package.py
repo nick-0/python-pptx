@@ -1,18 +1,22 @@
-# encoding: utf-8
+# pyright: reportPrivateUsage=false
 
 """Unit-test suite for `pptx.package` module."""
 
+from __future__ import annotations
+
+import os
+
 import pytest
 
+import pptx
 from pptx.media import Video
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.opc.package import Part, _Relationship
 from pptx.opc.packuri import PackURI
-from pptx.package import _ImageParts, _MediaParts, Package
+from pptx.package import Package, _ImageParts, _MediaParts
 from pptx.parts.coreprops import CorePropertiesPart
 from pptx.parts.image import Image, ImagePart
 from pptx.parts.media import MediaPart
-
 
 from .unitutil.mock import call, class_mock, instance_mock, method_mock, property_mock
 
@@ -21,7 +25,10 @@ class DescribePackage(object):
     """Unit-test suite for `pptx.package.Package` objects."""
 
     def it_provides_access_to_its_core_properties_part(self):
-        pkg = Package.open("pptx/templates/default.pptx")
+        default_pptx = os.path.abspath(
+            os.path.join(os.path.split(pptx.__file__)[0], "templates", "default.pptx")
+        )
+        pkg = Package.open(default_pptx)
         assert isinstance(pkg.core_properties, CorePropertiesPart)
 
     def it_can_get_or_add_an_image_part(self, image_part_fixture):
@@ -153,9 +160,7 @@ class Describe_ImageParts(object):
         image_parts, expected_parts = iter_fixture
         assert list(image_parts) == expected_parts
 
-    def it_can_get_a_matching_image_part(
-        self, Image_, image_, image_part_, _find_by_sha1_
-    ):
+    def it_can_get_a_matching_image_part(self, Image_, image_, image_part_, _find_by_sha1_):
         Image_.from_file.return_value = image_
         _find_by_sha1_.return_value = image_part_
         image_parts = _ImageParts(None)

@@ -1,18 +1,21 @@
-# encoding: utf-8
+# pyright: reportPrivateUsage=false
 
 """Unit test suite for pptx.shapes.shapetree module"""
 
+from __future__ import annotations
+
+import io
+
 import pytest
 
-from pptx.compat import BytesIO
 from pptx.chart.data import ChartData
 from pptx.enum.chart import XL_CHART_TYPE
 from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE, MSO_CONNECTOR, PP_PLACEHOLDER, PROG_ID
+from pptx.media import SPEAKER_IMAGE_BYTES, Video
 from pptx.oxml import parse_xml
 from pptx.oxml.shapes.groupshape import CT_GroupShape
 from pptx.oxml.shapes.picture import CT_Picture
 from pptx.oxml.shapes.shared import BaseShapeElement, ST_Direction
-from pptx.media import SPEAKER_IMAGE_BYTES, Video
 from pptx.parts.image import ImagePart
 from pptx.parts.slide import SlidePart
 from pptx.shapes.autoshape import AutoShapeType, Shape
@@ -23,36 +26,36 @@ from pptx.shapes.graphfrm import GraphicFrame
 from pptx.shapes.group import GroupShape
 from pptx.shapes.picture import Movie, Picture
 from pptx.shapes.placeholder import (
-    _BaseSlidePlaceholder,
     LayoutPlaceholder,
     MasterPlaceholder,
     NotesSlidePlaceholder,
+    _BaseSlidePlaceholder,
 )
 from pptx.shapes.shapetree import (
-    _BaseGroupShapes,
     BasePlaceholders,
     BaseShapeFactory,
-    _BaseShapes,
     GroupShapes,
     LayoutPlaceholders,
-    _LayoutShapeFactory,
     LayoutShapes,
     MasterPlaceholders,
-    _MasterShapeFactory,
     MasterShapes,
-    _MoviePicElementCreator,
     NotesSlidePlaceholders,
-    _NotesSlideShapeFactory,
     NotesSlideShapes,
-    _OleObjectElementCreator,
-    _SlidePlaceholderFactory,
     SlidePlaceholders,
     SlideShapeFactory,
     SlideShapes,
+    _BaseGroupShapes,
+    _BaseShapes,
+    _LayoutShapeFactory,
+    _MasterShapeFactory,
+    _MoviePicElementCreator,
+    _NotesSlideShapeFactory,
+    _OleObjectElementCreator,
+    _SlidePlaceholderFactory,
 )
 from pptx.slide import SlideLayout, SlideMaster
 from pptx.table import Table
-from pptx.util import Emu
+from pptx.util import Emu, Inches
 
 from ..oxml.unitdata.shape import a_ph, a_pic, an_nvPr, an_nvSpPr, an_sp
 from ..unitutil.cxml import element, xml
@@ -218,8 +221,7 @@ class Describe_BaseShapes(object):
             ("p:spTree/p:nvSpPr/(p:cNvPr{id=foo},p:cNvPr{id=2})", 3),
             ("p:spTree/p:nvSpPr/(p:cNvPr{id=1fo},p:cNvPr{id=2})", 3),
             (
-                "p:spTree/p:nvSpPr/(p:cNvPr{id=1},p:cNvPr{id=1},p:"
-                "cNvPr{id=1},p:cNvPr{id=4})",
+                "p:spTree/p:nvSpPr/(p:cNvPr{id=1},p:cNvPr{id=1},p:" "cNvPr{id=1},p:cNvPr{id=4})",
                 5,
             ),
         ]
@@ -244,9 +246,7 @@ class Describe_BaseShapes(object):
     )
     def ph_name_fixture(self, request):
         ph_type, sp_id, orient, expected_name = request.param
-        spTree = element(
-            "p:spTree/(p:cNvPr{name=Title 1},p:cNvPr{name=Table Placeholder " "3})"
-        )
+        spTree = element("p:spTree/(p:cNvPr{name=Title 1},p:cNvPr{name=Table Placeholder " "3})")
         shapes = SlideShapes(spTree, None)
         return shapes, ph_type, sp_id, orient, expected_name
 
@@ -264,8 +264,7 @@ class Describe_BaseShapes(object):
             ("p:spTree/p:nvSpPr/p:cNvPr{id=2}", True),
             ("p:spTree/p:nvSpPr/(p:cNvPr{id=1},p:cNvPr{id=3})", False),
             (
-                "p:spTree/p:nvSpPr/(p:cNvPr{id=1},p:cNvPr{id=1},p:"
-                "cNvPr{id=1},p:cNvPr{id=4})",
+                "p:spTree/p:nvSpPr/(p:cNvPr{id=1},p:cNvPr{id=1},p:" "cNvPr{id=1},p:cNvPr{id=4})",
                 True,
             ),
         ]
@@ -319,9 +318,7 @@ class Describe_BaseGroupShapes(object):
 
         graphic_frame = shapes.add_chart(XL_CHART_TYPE.PIE, x, y, cx, cy, chart_data_)
 
-        shapes.part.add_chart_part.assert_called_once_with(
-            XL_CHART_TYPE.PIE, chart_data_
-        )
+        shapes.part.add_chart_part.assert_called_once_with(XL_CHART_TYPE.PIE, chart_data_)
         _add_chart_graphicFrame_.assert_called_once_with(shapes, "rId42", x, y, cx, cy)
         _recalculate_extents_.assert_called_once_with(shapes)
         _shape_factory_.assert_called_once_with(shapes, graphicFrame)
@@ -347,9 +344,7 @@ class Describe_BaseGroupShapes(object):
 
         builder = shapes.build_freeform(start_x, start_y, scale)
 
-        FreeformBuilder_new_.assert_called_once_with(
-            shapes, start_x, start_y, x_scale, y_scale
-        )
+        FreeformBuilder_new_.assert_called_once_with(shapes, start_x, start_y, x_scale, y_scale)
         assert builder is builder_
 
     def it_can_add_a_group_shape(self, group_fixture):
@@ -375,10 +370,30 @@ class Describe_BaseGroupShapes(object):
         x, y, cx, cy = 1, 2, 3, 4
         shapes = _BaseGroupShapes(element("p:spTree"), None)
 
-        shape = shapes.add_ole_object("worksheet.xlsx", PROG_ID.XLSX, x, y, cx, cy)
+        shape = shapes.add_ole_object(
+            "worksheet.xlsx",
+            PROG_ID.XLSX,
+            x,
+            y,
+            cx,
+            cy,
+            "test.xlsx",
+            Inches(0.5),
+            Inches(0.75),
+        )
 
         _OleObjectElementCreator_.graphicFrame.assert_called_once_with(
-            shapes, 42, "worksheet.xlsx", PROG_ID.XLSX, x, y, cx, cy, None
+            shapes,
+            42,
+            "worksheet.xlsx",
+            PROG_ID.XLSX,
+            x,
+            y,
+            cx,
+            cy,
+            "test.xlsx",
+            Inches(0.5),
+            Inches(0.75),
         )
         assert shapes._spTree[-1] is graphicFrame
         _recalculate_extents_.assert_called_once_with(shapes)
@@ -602,9 +617,7 @@ class Describe_BaseGroupShapes(object):
         return shapes, x, y, cx, cy, expected_xml
 
     @pytest.fixture
-    def connector_fixture(
-        self, _add_cxnSp_, _shape_factory_, _recalculate_extents_, connector_
-    ):
+    def connector_fixture(self, _add_cxnSp_, _shape_factory_, _recalculate_extents_, connector_):
         shapes = _BaseGroupShapes(element("p:spTree"), None)
         connector_type = MSO_CONNECTOR.STRAIGHT
         begin_x, begin_y, end_x, end_y = 1, 2, 3, 4
@@ -746,9 +759,7 @@ class Describe_BaseGroupShapes(object):
         )
 
     @pytest.fixture
-    def textbox_fixture(
-        self, _add_textbox_sp_, _recalculate_extents_, _shape_factory_, shape_
-    ):
+    def textbox_fixture(self, _add_textbox_sp_, _recalculate_extents_, _shape_factory_, shape_):
         shapes = _BaseGroupShapes(None, None)
         x, y, cx, cy = 31, 32, 33, 34
         sp = element("p:sp")
@@ -762,9 +773,7 @@ class Describe_BaseGroupShapes(object):
 
     @pytest.fixture
     def _add_chart_graphicFrame_(self, request):
-        return method_mock(
-            request, _BaseGroupShapes, "_add_chart_graphicFrame", autospec=True
-        )
+        return method_mock(request, _BaseGroupShapes, "_add_chart_graphicFrame", autospec=True)
 
     @pytest.fixture
     def _add_cxnSp_(self, request):
@@ -772,9 +781,7 @@ class Describe_BaseGroupShapes(object):
 
     @pytest.fixture
     def _add_pic_from_image_part_(self, request):
-        return method_mock(
-            request, _BaseGroupShapes, "_add_pic_from_image_part", autospec=True
-        )
+        return method_mock(request, _BaseGroupShapes, "_add_pic_from_image_part", autospec=True)
 
     @pytest.fixture
     def _add_sp_(self, request):
@@ -834,9 +841,7 @@ class Describe_BaseGroupShapes(object):
 
     @pytest.fixture
     def _recalculate_extents_(self, request):
-        return method_mock(
-            request, _BaseGroupShapes, "_recalculate_extents", autospec=True
-        )
+        return method_mock(request, _BaseGroupShapes, "_recalculate_extents", autospec=True)
 
     @pytest.fixture
     def shape_(self, request):
@@ -1240,9 +1245,7 @@ class DescribeSlideShapes(object):
         _MoviePicElementCreator_, movie_pic = movie_fixture[9:11]
         _add_video_timing_, _shape_factory_, movie_ = movie_fixture[11:]
 
-        movie = shapes.add_movie(
-            movie_file, x, y, cx, cy, poster_frame_image, mime_type
-        )
+        movie = shapes.add_movie(movie_file, x, y, cx, cy, poster_frame_image, mime_type)
 
         _MoviePicElementCreator_.new_movie_pic.assert_called_once_with(
             shapes, shape_id_, movie_file, x, y, cx, cy, poster_frame_image, mime_type
@@ -1399,15 +1402,11 @@ class DescribeSlideShapes(object):
 
     @pytest.fixture
     def _MoviePicElementCreator_(self, request):
-        return class_mock(
-            request, "pptx.shapes.shapetree._MoviePicElementCreator", autospec=True
-        )
+        return class_mock(request, "pptx.shapes.shapetree._MoviePicElementCreator", autospec=True)
 
     @pytest.fixture
     def _next_shape_id_prop_(self, request, shape_id_):
-        return property_mock(
-            request, SlideShapes, "_next_shape_id", return_value=shape_id_
-        )
+        return property_mock(request, SlideShapes, "_next_shape_id", return_value=shape_id_)
 
     @pytest.fixture
     def placeholder_(self, request):
@@ -1534,9 +1533,7 @@ class Describe_LayoutShapeFactory(object):
 
     @pytest.fixture
     def ph_bldr(self):
-        return an_sp().with_child(
-            an_nvSpPr().with_child(an_nvPr().with_child(a_ph().with_idx(1)))
-        )
+        return an_sp().with_child(an_nvSpPr().with_child(an_nvPr().with_child(a_ph().with_idx(1))))
 
 
 class DescribeLayoutPlaceholders(object):
@@ -1659,9 +1656,7 @@ class Describe_MasterShapeFactory(object):
 
     @pytest.fixture
     def ph_bldr(self):
-        return an_sp().with_child(
-            an_nvSpPr().with_child(an_nvPr().with_child(a_ph().with_idx(1)))
-        )
+        return an_sp().with_child(an_nvSpPr().with_child(an_nvPr().with_child(a_ph().with_idx(1))))
 
     @pytest.fixture
     def slide_master_(self, request):
@@ -1828,17 +1823,35 @@ class Describe_MoviePicElementCreator(object):
 
         poster_frame_rId = movie_pic_element_creator._poster_frame_rId
 
-        slide_part_.get_or_add_image_part.assert_called_once_with(
-            poster_frame_image_file
-        )
+        slide_part_.get_or_add_image_part.assert_called_once_with(poster_frame_image_file)
         assert poster_frame_rId == expected_value
 
-    def it_gets_the_poster_frame_image_file_to_help(self, pfrm_img_fixture):
-        movie_pic_element_creator, BytesIO_ = pfrm_img_fixture[:2]
-        calls, expected_value = pfrm_img_fixture[2:]
+    def it_gets_the_poster_frame_image_from_the_specified_path_to_help(
+        self, request: pytest.FixtureRequest
+    ):
+        BytesIO_ = class_mock(request, "pptx.shapes.shapetree.io.BytesIO")
+        movie_pic_element_creator = _MoviePicElementCreator(
+            None, None, None, None, None, None, None, "image.png", None  # type: ignore
+        )
+
         image_file = movie_pic_element_creator._poster_frame_image_file
-        assert BytesIO_.call_args_list == calls
-        assert image_file == expected_value
+
+        BytesIO_.assert_not_called()
+        assert image_file == "image.png"
+
+    def but_it_gets_the_poster_frame_image_from_the_default_bytes_when_None_specified(
+        self, request: pytest.FixtureRequest
+    ):
+        stream_ = instance_mock(request, io.BytesIO)
+        BytesIO_ = class_mock(request, "pptx.shapes.shapetree.io.BytesIO", return_value=stream_)
+        movie_pic_element_creator = _MoviePicElementCreator(
+            None, None, None, None, None, None, None, None, None  # type: ignore
+        )
+
+        image_file = movie_pic_element_creator._poster_frame_image_file
+
+        BytesIO_.assert_called_once_with(SPEAKER_IMAGE_BYTES)
+        assert image_file == stream_
 
     def it_gets_the_video_part_rIds_to_help(self, part_rIds_fixture):
         movie_pic_element_creator, slide_part_ = part_rIds_fixture[:2]
@@ -1866,9 +1879,7 @@ class Describe_MoviePicElementCreator(object):
         return movie_pic_element_creator, expected_value
 
     @pytest.fixture
-    def movie_pic_fixture(
-        self, shapes_, _MoviePicElementCreator_init_, _pic_prop_, pic_
-    ):
+    def movie_pic_fixture(self, shapes_, _MoviePicElementCreator_init_, _pic_prop_, pic_):
         shape_id, movie_file, x, y, cx, cy = 42, "movie.mp4", 1, 2, 3, 4
         poster_frame_image, mime_type = "image.png", "video/mp4"
         return (
@@ -1897,25 +1908,8 @@ class Describe_MoviePicElementCreator(object):
         _video_prop_.return_value = video_
         return (movie_pic_element_creator, slide_part_, video_, media_rId, video_rId)
 
-    @pytest.fixture(params=["image.png", None])
-    def pfrm_img_fixture(self, request, BytesIO_, stream_):
-        poster_frame_file = request.param
-        movie_pic_element_creator = _MoviePicElementCreator(
-            None, None, None, None, None, None, None, poster_frame_file, None
-        )
-        if poster_frame_file is None:
-            calls = [call(SPEAKER_IMAGE_BYTES)]
-            BytesIO_.return_value = stream_
-            expected_value = stream_
-        else:
-            calls = []
-            expected_value = poster_frame_file
-        return movie_pic_element_creator, BytesIO_, calls, expected_value
-
     @pytest.fixture
-    def pfrm_rId_fixture(
-        self, _slide_part_prop_, slide_part_, _poster_frame_image_file_prop_
-    ):
+    def pfrm_rId_fixture(self, _slide_part_prop_, slide_part_, _poster_frame_image_file_prop_):
         movie_pic_element_creator = _MoviePicElementCreator(
             None, None, None, None, None, None, None, None, None
         )
@@ -2002,10 +1996,6 @@ class Describe_MoviePicElementCreator(object):
     # fixture components ---------------------------------------------
 
     @pytest.fixture
-    def BytesIO_(self, request):
-        return class_mock(request, "pptx.shapes.shapetree.BytesIO")
-
-    @pytest.fixture
     def from_path_or_file_like_(self, request):
         return method_mock(request, Video, "from_path_or_file_like", autospec=False)
 
@@ -2027,15 +2017,11 @@ class Describe_MoviePicElementCreator(object):
 
     @pytest.fixture
     def _pic_prop_(self, request, pic_):
-        return property_mock(
-            request, _MoviePicElementCreator, "_pic", return_value=pic_
-        )
+        return property_mock(request, _MoviePicElementCreator, "_pic", return_value=pic_)
 
     @pytest.fixture
     def _poster_frame_image_file_prop_(self, request):
-        return property_mock(
-            request, _MoviePicElementCreator, "_poster_frame_image_file"
-        )
+        return property_mock(request, _MoviePicElementCreator, "_poster_frame_image_file")
 
     @pytest.fixture
     def _poster_frame_rId_prop_(self, request):
@@ -2056,10 +2042,6 @@ class Describe_MoviePicElementCreator(object):
     @pytest.fixture
     def _slide_part_prop_(self, request):
         return property_mock(request, _MoviePicElementCreator, "_slide_part")
-
-    @pytest.fixture
-    def stream_(self, request):
-        return instance_mock(request, BytesIO)
 
     @pytest.fixture
     def video_(self, request):
@@ -2093,33 +2075,46 @@ class Describe_OleObjectElementCreator(object):
         )
 
         graphicFrame = _OleObjectElementCreator.graphicFrame(
-            shapes_, shape_id, "sheet.xlsx", PROG_ID.XLSX, x, y, cx, cy, "icon.png"
+            shapes_,
+            shape_id,
+            "sheet.xlsx",
+            PROG_ID.XLSX,
+            x,
+            y,
+            cx,
+            cy,
+            "icon.png",
+            Inches(0.5),
+            Inches(0.75),
         )
 
         _init_.assert_called_once_with(
-            ANY, shapes_, shape_id, "sheet.xlsx", PROG_ID.XLSX, x, y, cx, cy, "icon.png"
+            ANY,
+            shapes_,
+            shape_id,
+            "sheet.xlsx",
+            PROG_ID.XLSX,
+            x,
+            y,
+            cx,
+            cy,
+            "icon.png",
+            Inches(0.5),
+            Inches(0.75),
         )
         _graphicFrame_prop_.assert_called_once_with()
         assert graphicFrame is graphicFrame_
 
     def it_creates_the_graphicFrame_element(self, request):
         shape_id, x, y, cx, cy = 7, 1, 2, 3, 4
-        property_mock(
-            request, _OleObjectElementCreator, "_shape_name", return_value="Object 42"
-        )
-        property_mock(
-            request, _OleObjectElementCreator, "_ole_object_rId", return_value="rId42"
-        )
-        property_mock(
-            request, _OleObjectElementCreator, "_progId", return_value="Excel.Sheet.42"
-        )
-        property_mock(
-            request, _OleObjectElementCreator, "_icon_rId", return_value="rId24"
-        )
+        property_mock(request, _OleObjectElementCreator, "_shape_name", return_value="Object 42")
+        property_mock(request, _OleObjectElementCreator, "_ole_object_rId", return_value="rId42")
+        property_mock(request, _OleObjectElementCreator, "_progId", return_value="Excel.Sheet.42")
+        property_mock(request, _OleObjectElementCreator, "_icon_rId", return_value="rId24")
         property_mock(request, _OleObjectElementCreator, "_cx", return_value=cx)
         property_mock(request, _OleObjectElementCreator, "_cy", return_value=cy)
         element_creator = _OleObjectElementCreator(
-            None, shape_id, None, None, x, y, cx, cy, None
+            None, shape_id, None, None, x, y, cx, cy, None, Inches(0.5), Inches(0.75)
         )
 
         assert element_creator._graphicFrame.xml == (
@@ -2142,7 +2137,7 @@ class Describe_OleObjectElementCreator(object):
             "  <a:graphic>\n"
             "    <a:graphicData "
             'uri="http://schemas.openxmlformats.org/presentationml/2006/ole">\n'
-            '      <p:oleObj showAsIcon="1" r:id="rId42" imgW="965200" imgH="609600" '
+            '      <p:oleObj showAsIcon="1" r:id="rId42" imgW="457200" imgH="685800" '
             'progId="Excel.Sheet.42">\n'
             "        <p:embed/>\n"
             "        <p:pic>\n"
@@ -2183,9 +2178,9 @@ class Describe_OleObjectElementCreator(object):
             (None, "Foo.Bar.6", Emu(965200)),
         ),
     )
-    def it_determines_the_icon_width_to_help(self, cx_arg, prog_id, expected_value):
+    def it_determines_the_shape_width_to_help(self, cx_arg, prog_id, expected_value):
         element_creator = _OleObjectElementCreator(
-            None, None, None, prog_id, None, None, cx_arg, None, None
+            None, None, None, prog_id, None, None, cx_arg, None, None, None, None
         )
         assert element_creator._cx == expected_value
 
@@ -2199,11 +2194,24 @@ class Describe_OleObjectElementCreator(object):
             (None, "Foo.Bar.6", Emu(609600)),
         ),
     )
-    def it_determines_the_icon_height_to_help(self, cy_arg, prog_id, expected_value):
+    def it_determines_the_shape_height_to_help(self, cy_arg, prog_id, expected_value):
         element_creator = _OleObjectElementCreator(
-            None, None, None, prog_id, None, None, None, cy_arg, None
+            None, None, None, prog_id, None, None, None, cy_arg, None, None, None
         )
         assert element_creator._cy == expected_value
+
+    @pytest.mark.parametrize(
+        "icon_height_arg, expected_value",
+        (
+            (Emu(666666), Emu(666666)),
+            (None, Emu(609600)),
+        ),
+    )
+    def it_determines_the_icon_height_to_help(self, icon_height_arg, expected_value):
+        element_creator = _OleObjectElementCreator(
+            None, None, None, None, None, None, None, None, None, None, icon_height_arg
+        )
+        assert element_creator._icon_height == expected_value
 
     @pytest.mark.parametrize(
         "icon_file_arg, prog_id, expected_value",
@@ -2215,11 +2223,9 @@ class Describe_OleObjectElementCreator(object):
             (None, PROG_ID.XLSX, "xlsx-icon.emf"),
         ),
     )
-    def it_resolves_the_icon_image_file_to_help(
-        self, icon_file_arg, prog_id, expected_value
-    ):
+    def it_resolves_the_icon_image_file_to_help(self, icon_file_arg, prog_id, expected_value):
         element_creator = _OleObjectElementCreator(
-            None, None, None, prog_id, None, None, None, None, icon_file_arg
+            None, None, None, prog_id, None, None, None, None, icon_file_arg, None, None
         )
         assert element_creator._icon_image_file.endswith(expected_value)
 
@@ -2235,13 +2241,23 @@ class Describe_OleObjectElementCreator(object):
         slide_part_.get_or_add_image_part.return_value = None, "rId16"
         _slide_part_prop_.return_value = slide_part_
         element_creator = _OleObjectElementCreator(
-            None, None, None, None, None, None, None, None, None
+            None, None, None, None, None, None, None, None, None, None, None
         )
 
         rId = element_creator._icon_rId
 
         slide_part_.get_or_add_image_part.assert_called_once_with("obj-icon.emf")
         assert rId == "rId16"
+
+    @pytest.mark.parametrize(
+        "icon_width_arg, expected_value",
+        ((Emu(666666), Emu(666666)), (None, Emu(965200))),
+    )
+    def it_determines_the_icon_width_to_help(self, icon_width_arg, expected_value):
+        element_creator = _OleObjectElementCreator(
+            None, None, None, None, None, None, None, None, None, icon_width_arg, None
+        )
+        assert element_creator._icon_width == expected_value
 
     def it_adds_and_relates_the_ole_object_part_to_help(
         self, request, _slide_part_prop_, slide_part_
@@ -2250,7 +2266,17 @@ class Describe_OleObjectElementCreator(object):
         slide_part_.add_embedded_ole_object_part.return_value = "rId14"
         _slide_part_prop_.return_value = slide_part_
         element_creator = _OleObjectElementCreator(
-            None, None, ole_object_file, PROG_ID.DOCX, None, None, None, None, None
+            None,
+            None,
+            ole_object_file,
+            PROG_ID.DOCX,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
 
         rId = element_creator._ole_object_rId
@@ -2271,21 +2297,21 @@ class Describe_OleObjectElementCreator(object):
     )
     def it_resolves_the_progId_str_to_help(self, prog_id_arg, expected_value):
         element_creator = _OleObjectElementCreator(
-            None, None, None, prog_id_arg, None, None, None, None, None
+            None, None, None, prog_id_arg, None, None, None, None, None, None, None
         )
         assert element_creator._progId == expected_value
 
     def it_computes_the_shape_name_to_help(self):
         shape_id = 42
         element_creator = _OleObjectElementCreator(
-            None, shape_id, None, None, None, None, None, None, None
+            None, shape_id, None, None, None, None, None, None, None, None, None
         )
         assert element_creator._shape_name == "Object 41"
 
     def it_provides_access_to_the_slide_part_to_help(self, shapes_, slide_part_):
         shapes_.part = slide_part_
         element_creator = _OleObjectElementCreator(
-            shapes_, None, None, None, None, None, None, None, None
+            shapes_, None, None, None, None, None, None, None, None, None, None
         )
 
         assert element_creator._slide_part is slide_part_

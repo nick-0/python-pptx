@@ -1,10 +1,6 @@
-# encoding: utf-8
+"""Test suite for `pptx.dml.line` module."""
 
-"""
-Test suite for pptx.dml.line module
-"""
-
-from __future__ import absolute_import, print_function, unicode_literals
+from __future__ import annotations
 
 import pytest
 
@@ -25,10 +21,39 @@ class DescribeLineFormat(object):
         line, expected_value = dash_style_get_fixture
         assert line.dash_style == expected_value
 
-    def it_can_change_its_dash_style(self, dash_style_set_fixture):
-        line, dash_style, spPr, expected_xml = dash_style_set_fixture
+    @pytest.mark.parametrize(
+        ("spPr_cxml", "dash_style", "expected_cxml"),
+        [
+            ("p:spPr{a:b=c}", MSO_LINE.DASH, "p:spPr{a:b=c}/a:ln/a:prstDash{val=dash}"),
+            ("p:spPr/a:ln", MSO_LINE.ROUND_DOT, "p:spPr/a:ln/a:prstDash{val=sysDot}"),
+            (
+                "p:spPr/a:ln/a:prstDash",
+                MSO_LINE.SOLID,
+                "p:spPr/a:ln/a:prstDash{val=solid}",
+            ),
+            (
+                "p:spPr/a:ln/a:custDash",
+                MSO_LINE.DASH_DOT,
+                "p:spPr/a:ln/a:prstDash{val=dashDot}",
+            ),
+            (
+                "p:spPr/a:ln/a:prstDash{val=dash}",
+                MSO_LINE.LONG_DASH,
+                "p:spPr/a:ln/a:prstDash{val=lgDash}",
+            ),
+            ("p:spPr/a:ln/a:prstDash{val=dash}", None, "p:spPr/a:ln"),
+            ("p:spPr/a:ln/a:custDash", None, "p:spPr/a:ln"),
+        ],
+    )
+    def it_can_change_its_dash_style(
+        self, spPr_cxml: str, dash_style: MSO_LINE, expected_cxml: str
+    ):
+        spPr = element(spPr_cxml)
+        line = LineFormat(spPr)
+
         line.dash_style = dash_style
-        assert spPr.xml == expected_xml
+
+        assert spPr.xml == xml(expected_cxml)
 
     def it_knows_its_width(self, width_get_fixture):
         line, expected_line_width = width_get_fixture
@@ -53,9 +78,7 @@ class DescribeLineFormat(object):
 
     # fixtures -------------------------------------------------------
 
-    @pytest.fixture(
-        params=[(MSO_FILL.SOLID, False), (MSO_FILL.BACKGROUND, True), (None, True)]
-    )
+    @pytest.fixture(params=[(MSO_FILL.SOLID, False), (MSO_FILL.BACKGROUND, True), (None, True)])
     def color_fixture(self, request, line, fill_prop_, fill_, color_):
         pre_call_fill_type, solid_call_expected = request.param
         fill_.type = pre_call_fill_type
@@ -76,36 +99,6 @@ class DescribeLineFormat(object):
         spPr = element(spPr_cxml)
         line = LineFormat(spPr)
         return line, expected_value
-
-    @pytest.fixture(
-        params=[
-            ("p:spPr{a:b=c}", MSO_LINE.DASH, "p:spPr{a:b=c}/a:ln/a:prstDash{val=dash}"),
-            ("p:spPr/a:ln", MSO_LINE.ROUND_DOT, "p:spPr/a:ln/a:prstDash{val=dot}"),
-            (
-                "p:spPr/a:ln/a:prstDash",
-                MSO_LINE.SOLID,
-                "p:spPr/a:ln/a:prstDash{val=solid}",
-            ),
-            (
-                "p:spPr/a:ln/a:custDash",
-                MSO_LINE.DASH_DOT,
-                "p:spPr/a:ln/a:prstDash{val=dashDot}",
-            ),
-            (
-                "p:spPr/a:ln/a:prstDash{val=dash}",
-                MSO_LINE.LONG_DASH,
-                "p:spPr/a:ln/a:prstDash{val=lgDash}",
-            ),
-            ("p:spPr/a:ln/a:prstDash{val=dash}", None, "p:spPr/a:ln"),
-            ("p:spPr/a:ln/a:custDash", None, "p:spPr/a:ln"),
-        ]
-    )
-    def dash_style_set_fixture(self, request):
-        spPr_cxml, dash_style, expected_cxml = request.param
-        spPr = element(spPr_cxml)
-        line = LineFormat(spPr)
-        expected_xml = xml(expected_cxml)
-        return line, dash_style, spPr, expected_xml
 
     @pytest.fixture
     def fill_fixture(self, line, FillFormat_, ln_, fill_):
@@ -129,9 +122,7 @@ class DescribeLineFormat(object):
     )
     def width_set_fixture(self, request, shape_):
         initial_width, width = request.param
-        shape_.ln = shape_.get_or_add_ln.return_value = self.ln_bldr(
-            initial_width
-        ).element
+        shape_.ln = shape_.get_or_add_ln.return_value = self.ln_bldr(initial_width).element
         line = LineFormat(shape_)
         expected_xml = self.ln_bldr(width).xml()
         return line, width, expected_xml
