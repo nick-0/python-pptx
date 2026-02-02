@@ -23,37 +23,31 @@ if TYPE_CHECKING:
 
 
 
+
+A_NS  = "http://schemas.openxmlformats.org/drawingml/2006/main"
+A16_NS = "http://schemas.microsoft.com/office/drawing/2014/main"
+NS = {"a": A_NS, "a16": A16_NS}
+
+def _random_10_digit_id() -> str:
+    return str(randint(10**9, 10**10 - 1))
+
 def _clear_cell_preserve_format(cell:_Cell):
-    """
-    Clear text while preserving the existing run/paragraph formatting.
-    Also remove extra runs/paragraphs to keep PowerPoint table formatting editable.
-    """
     tf = cell.text_frame
     p = tf.paragraphs[0]
 
-    # Ensure there is at least one run
-    if not p.runs:
-        r = p.add_run()
+    # keep first run, clear it; remove extra runs/paras at XML level
+    if p.runs:
+        p.runs[0].text = ""
+        p_elm = p._p
+        for extra_r in list(p_elm.r_lst)[1:]:
+            p_elm.remove(extra_r)
     else:
-        r = p.runs[0]
+        p.add_run().text = ""
 
-    # Clear first run text
-    r.text = ""
-
-    # Remove extra runs (ghost runs break later styling changes in PowerPoint)
-    p_elm = p._p
-    for extra_r in list(p_elm.r_lst)[1:]:
-        p_elm.remove(extra_r)
-
-    # Remove extra paragraphs if template had more than one
     txBody = tf._txBody
     for extra_p in list(txBody.p_lst)[1:]:
         txBody.remove(extra_p)
 
-
-def _random_10_digit_id():
-    # 10 digits, avoid leading zero
-    return str(randint(10**9, 10**10 - 1))
 
 
 class Table(object):
@@ -88,38 +82,31 @@ class Table(object):
 
     def add_column(self) -> None:
         """
-        Duplicates last column to keep formatting and resets new cells' text
-        WITHOUT rebuilding the internal run structure. Also scopes XML edits
-        to the newly added cell only.
+        Duplicate the last column (grid + cells) to preserve formatting,
+        but normalize IDs and clear text safely so the table remains editable
+        in PowerPoint without needing a Save-As round trip.
         """
-        prefix_map = {
-            "a16": "http://schemas.microsoft.com/office/drawing/2014/main",
-            "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
-        }
-
-        # 1) Copy the last gridCol to preserve width
+        # 1) Duplicate last tblGrid column (preserve width)
         new_grid_col = deepcopy(self._tbl.tblGrid.gridCol_lst[-1])
+
+        # If there are any Office 2014 colId extension values in the gridCol, refresh them
+        for col_id in new_grid_col.findall(".//a16:colId", NS):
+            col_id.set("val", _random_10_digit_id())
+
         self._tbl.tblGrid.append(new_grid_col)
 
-        # 2) For each row, clone the last tc (preserves cell formatting)
+        # 2) For each row, duplicate last cell and append
         for tr in self._tbl.tr_lst:
             new_tc = deepcopy(tr.tc_lst[-1])
             tr.append(new_tc)
 
-            # 2a) Clear text safely (preserve style linkage)
+            # 2a) Clear text without rebuilding the text XML
             cell = _Cell(new_tc, tr.tc_lst)
             _clear_cell_preserve_format(cell)
 
-            # 2b) Update ONLY colId elements inside the new cell (if present)
-            for elm in new_tc.findall('.//a16:colId', prefix_map):
-                elm.set('val', _random_10_digit_id())
-
-            # 2c) OPTIONAL: remove extLst ONLY inside the new cell, not the whole row
-            # (Safer than nuking every extLst under <a:tr>)
-            for ext in new_tc.findall('.//a:extLst', prefix_map):
-                parent = ext.getparent()
-                if parent is not None:
-                    parent.remove(ext)
+            # 2b) Refresh any a16:colId inside the NEW cell only (avoid collisions)
+            for col_id in new_tc.findall(".//a16:colId", NS):
+                col_id.set("val", _random_10_digit_id())
 
     def remove_column(self,column_idx:int):
         # col_idx = self._tbl.tblGrid.index(column._gridCol)
@@ -237,9 +224,13 @@ class Table(object):
         return _RowCollection(self._tbl, self)
 
     def add_row(self):
-        # duplicate last row of the table as a new row to be added
         new_row = deepcopy(self._tbl.tr_lst[-1])
 
+        # 1) Ensure the row has a unique a16:rowId (this is the key bug)
+        for row_id in new_row.findall(".//a16:rowId", NS):
+            row_id.set("val", _random_10_digit_id())
+
+        # 2) Clear each cell's text WITHOUT using paragraph.text / text_frame.text
         for tc in new_row.tc_lst:
             cell = _Cell(tc, new_row.tc_lst)
             _clear_cell_preserve_format(cell)
