@@ -22,6 +22,40 @@ if TYPE_CHECKING:
     from pptx.util import Length
 
 
+
+def _clear_cell_preserve_format(cell:_Cell):
+    """
+    Clear text while preserving the existing run/paragraph formatting.
+    Also remove extra runs/paragraphs to keep PowerPoint table formatting editable.
+    """
+    tf = cell.text_frame
+    p = tf.paragraphs[0]
+
+    # Ensure there is at least one run
+    if not p.runs:
+        r = p.add_run()
+    else:
+        r = p.runs[0]
+
+    # Clear first run text
+    r.text = ""
+
+    # Remove extra runs (ghost runs break later styling changes in PowerPoint)
+    p_elm = p._p
+    for extra_r in list(p_elm.r_lst)[1:]:
+        p_elm.remove(extra_r)
+
+    # Remove extra paragraphs if template had more than one
+    txBody = tf._txBody
+    for extra_p in list(txBody.p_lst)[1:]:
+        txBody.remove(extra_p)
+
+
+def _random_10_digit_id():
+    # 10 digits, avoid leading zero
+    return str(randint(10**9, 10**10 - 1))
+
+
 class Table(object):
     """A DrawingML table object.
 
@@ -51,37 +85,42 @@ class Table(object):
         """
         return _ColumnCollection(self._tbl, self)
 
+
     def add_column(self) -> None:
         """
-        Duplicates last column to keep formatting and resets it's cells text_frames
-        (e.g. ``column = table.columns.add_column()``).
+        Duplicates last column to keep formatting and resets new cells' text
+        WITHOUT rebuilding the internal run structure. Also scopes XML edits
+        to the newly added cell only.
         """
-        def random_with_N_digits(n:int)->int:
-            range_start = 10**(n-1)
-            range_end = int(((10**n)-1)*.3)
-            return randint(range_start, range_end)
-        new_col = deepcopy(self._tbl.tblGrid.gridCol_lst[-1])
-        
         prefix_map = {
-            "a16":"http://schemas.microsoft.com/office/drawing/2014/main",
-            "a":"http://schemas.openxmlformats.org/drawingml/2006/main",
-            }
-        elms = new_col.findall('.//a16:colId',prefix_map)
-        for elm in elms:
-            elm.set('val', str(random_with_N_digits(10)))
+            "a16": "http://schemas.microsoft.com/office/drawing/2014/main",
+            "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+        }
 
-        # print(etree.tostring(new_col))
-        self._tbl.tblGrid.append(new_col)  # copies last grid element
+        # 1) Copy the last gridCol to preserve width
+        new_grid_col = deepcopy(self._tbl.tblGrid.gridCol_lst[-1])
+        self._tbl.tblGrid.append(new_grid_col)
 
+        # 2) For each row, clone the last tc (preserves cell formatting)
         for tr in self._tbl.tr_lst:
             new_tc = deepcopy(tr.tc_lst[-1])
             tr.append(new_tc)
+
+            # 2a) Clear text safely (preserve style linkage)
             cell = _Cell(new_tc, tr.tc_lst)
-            cell.text_frame.paragraphs[0].text = ""
-            elms = tr.findall('.//a:extLst', prefix_map)
-            for elm in elms:
-                tr.remove(elm)
-    
+            _clear_cell_preserve_format(cell)
+
+            # 2b) Update ONLY colId elements inside the new cell (if present)
+            for elm in new_tc.findall('.//a16:colId', prefix_map):
+                elm.set('val', _random_10_digit_id())
+
+            # 2c) OPTIONAL: remove extLst ONLY inside the new cell, not the whole row
+            # (Safer than nuking every extLst under <a:tr>)
+            for ext in new_tc.findall('.//a:extLst', prefix_map):
+                parent = ext.getparent()
+                if parent is not None:
+                    parent.remove(ext)
+
     def remove_column(self,column_idx:int):
         # col_idx = self._tbl.tblGrid.index(column._gridCol)
         if column_idx == -1:
@@ -198,14 +237,14 @@ class Table(object):
         return _RowCollection(self._tbl, self)
 
     def add_row(self):
-        new_row = deepcopy(self._tbl.tr_lst[-1]) 
-        # duplicating last row of the table as a new row to be added
-        
+        # duplicate last row of the table as a new row to be added
+        new_row = deepcopy(self._tbl.tr_lst[-1])
+
         for tc in new_row.tc_lst:
             cell = _Cell(tc, new_row.tc_lst)
-            cell.text_frame.paragraphs[0].text = ""# defaulting cell contents to empty text
+            _clear_cell_preserve_format(cell)
 
-        self._tbl.append(new_row) 
+        self._tbl.append(new_row)
 
     def remove_row(self, row_idx: int) -> None:
         if row_idx == -1:
