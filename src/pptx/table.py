@@ -12,6 +12,7 @@ from pptx.util import Emu, lazyproperty
 
 from copy import deepcopy
 from random import randint
+import itertools
 
 if TYPE_CHECKING:
     from pptx.enum.text import MSO_VERTICAL_ANCHOR
@@ -48,6 +49,47 @@ def _clear_cell_preserve_format(cell:_Cell):
     for extra_p in list(txBody.p_lst)[1:]:
         txBody.remove(extra_p)
 
+def _max_a16_val(tbl_elm, xpath: str) -> int | None:
+    """
+    Returns max integer value of @val over nodes matched by xpath,
+    or None if none exist / none parse as int.
+    """
+    vals = []
+    for e in tbl_elm.findall(xpath, NS):
+        v = e.get("val")
+        try:
+            vals.append(int(v))
+        except (TypeError, ValueError):
+            pass
+    return max(vals) if vals else None
+
+
+def _get_rowid_counter(self):
+    """
+    Monotonic rowId generator stored on the table wrapper instance (self).
+    Seed = max existing rowId + 1, else 10000.
+    """
+    ctr = getattr(self, "_dd_rowid_counter", None)
+    if ctr is None:
+        m = _max_a16_val(self._tbl, ".//a16:rowId")
+        start = (m + 1) if m is not None else 10000
+        ctr = itertools.count(start)
+        setattr(self, "_dd_rowid_counter", ctr)
+    return ctr
+
+
+def _get_colid_counter(self):
+    """
+    Monotonic colId generator stored on the table wrapper instance (self).
+    Seed = max existing colId + 1, else 10000.
+    """
+    ctr = getattr(self, "_dd_colid_counter", None)
+    if ctr is None:
+        m = _max_a16_val(self._tbl, ".//a16:colId")
+        start = (m + 1) if m is not None else 10000
+        ctr = itertools.count(start)
+        setattr(self, "_dd_colid_counter", ctr)
+    return ctr
 
 
 class Table(object):
@@ -80,18 +122,21 @@ class Table(object):
         return _ColumnCollection(self._tbl, self)
 
 
+
     def add_column(self) -> None:
         """
-        Duplicate the last column (grid + cells) to preserve formatting,
-        but normalize IDs and clear text safely so the table remains editable
-        in PowerPoint without needing a Save-As round trip.
+        Duplicate the last column (tblGrid + cells) to preserve formatting,
+        assign monotonically increasing a16:colId where present, and clear
+        the new cell text safely so PowerPoint can edit the table immediately.
         """
+        col_ctr = _get_colid_counter(self)
+
         # 1) Duplicate last tblGrid column (preserve width)
         new_grid_col = deepcopy(self._tbl.tblGrid.gridCol_lst[-1])
 
-        # If there are any Office 2014 colId extension values in the gridCol, refresh them
+        # Refresh any Office 2014 colId inside the new gridCol (if present)
         for col_id in new_grid_col.findall(".//a16:colId", NS):
-            col_id.set("val", _random_10_digit_id())
+            col_id.set("val", str(next(col_ctr)))
 
         self._tbl.tblGrid.append(new_grid_col)
 
@@ -100,13 +145,13 @@ class Table(object):
             new_tc = deepcopy(tr.tc_lst[-1])
             tr.append(new_tc)
 
-            # 2a) Clear text without rebuilding the text XML
+            # Clear new cell safely (preserve styling + remove ghost runs)
             cell = _Cell(new_tc, tr.tc_lst)
             _clear_cell_preserve_format(cell)
 
-            # 2b) Refresh any a16:colId inside the NEW cell only (avoid collisions)
+            # Refresh any a16:colId inside the NEW cell only
             for col_id in new_tc.findall(".//a16:colId", NS):
-                col_id.set("val", _random_10_digit_id())
+                col_id.set("val", str(next(col_ctr)))
 
     def remove_column(self,column_idx:int):
         # col_idx = self._tbl.tblGrid.index(column._gridCol)
@@ -223,14 +268,16 @@ class Table(object):
         """
         return _RowCollection(self._tbl, self)
 
+
     def add_row(self):
         new_row = deepcopy(self._tbl.tr_lst[-1])
 
-        # 1) Ensure the row has a unique a16:rowId (this is the key bug)
+        # 1) Monotonic a16:rowId (critical for editability w/o Save-As)
+        row_ctr = _get_rowid_counter(self)
         for row_id in new_row.findall(".//a16:rowId", NS):
-            row_id.set("val", _random_10_digit_id())
+            row_id.set("val", str(next(row_ctr)))
 
-        # 2) Clear each cell's text WITHOUT using paragraph.text / text_frame.text
+        # 2) Clear text safely (do NOT use paragraph.text / text_frame.text)
         for tc in new_row.tc_lst:
             cell = _Cell(tc, new_row.tc_lst)
             _clear_cell_preserve_format(cell)
